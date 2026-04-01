@@ -13,6 +13,11 @@ extension simd_float4x4 {
         SIMD3<Float>(columns.3.x, columns.3.y, columns.3.z)
     }
 
+    func transformPoint(_ point: SIMD3<Float>) -> SIMD3<Float> {
+        let homogenous = self * SIMD4<Float>(point.x, point.y, point.z, 1)
+        return SIMD3<Float>(homogenous.x, homogenous.y, homogenous.z)
+    }
+
     var yawRadians: Float {
         let forward = SIMD3<Float>(columns.2.x, 0, columns.2.z)
         if simd_length_squared(forward) < 0.000_001 {
