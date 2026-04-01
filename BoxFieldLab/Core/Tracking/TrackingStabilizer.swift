@@ -203,7 +203,8 @@ final class TrackingStabilizer {
             lifecycleState: state.trackingState,
             activeScenarioName: "",
             isSyntheticInput: false,
-            fieldOpacity: 0
+            fieldOpacity: 0,
+            replayElapsedSeconds: nil
         )
 
         return TrackingStepResult(state: state, debugSnapshot: snapshot, events: events)

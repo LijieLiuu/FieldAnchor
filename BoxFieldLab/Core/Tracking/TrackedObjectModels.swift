@@ -19,9 +19,9 @@ enum TrackingInputMode: String, CaseIterable, Identifiable {
         case .manualScripted:
             return "Manual Scripted"
         case .replayScenario:
-            return "Replay Scenario"
+            return "Replay Scenario (Recommended)"
         case .objectTracking:
-            return "Object Tracking"
+            return "Object Tracking (Hardware)"
         }
     }
 
@@ -32,6 +32,55 @@ enum TrackingInputMode: String, CaseIterable, Identifiable {
         case .objectTracking:
             return false
         }
+    }
+}
+
+enum ValidationMode: String, CaseIterable, Identifiable {
+    case normalField
+    case diagnosticsOnly
+
+    var id: String { rawValue }
+
+    var label: String {
+        switch self {
+        case .normalField:
+            return "Normal Field"
+        case .diagnosticsOnly:
+            return "Diagnostics First"
+        }
+    }
+
+    var summary: String {
+        switch self {
+        case .normalField:
+            return "Show the magnetic field together with tracking diagnostics."
+        case .diagnosticsOnly:
+            return "Hide the magnetic field and focus on raw vs stabilized tracking behavior."
+        }
+    }
+}
+
+struct ReplayPlaybackState: Sendable {
+    var isPlaying: Bool
+    var elapsedSeconds: TimeInterval
+    var speedMultiplier: Double
+
+    static let defaults = ReplayPlaybackState(
+        isPlaying: true,
+        elapsedSeconds: 0,
+        speedMultiplier: 1.0
+    )
+
+    var speedLabel: String {
+        String(format: "%.1fx", speedMultiplier)
+    }
+
+    var statusLabel: String {
+        isPlaying ? "Playing" : "Paused"
+    }
+
+    var formattedElapsed: String {
+        String(format: "%.2fs", elapsedSeconds)
     }
 }
 
@@ -156,6 +205,48 @@ struct StabilizerParameters: Sendable {
     static let defaults = StabilizerParameters()
 }
 
+enum StabilizerPreset: String, CaseIterable, Identifiable {
+    case balanced
+    case smooth
+    case responsive
+
+    var id: String { rawValue }
+
+    var label: String {
+        switch self {
+        case .balanced:
+            return "Balanced"
+        case .smooth:
+            return "Smooth"
+        case .responsive:
+            return "Responsive"
+        }
+    }
+
+    var parameters: StabilizerParameters {
+        switch self {
+        case .balanced:
+            return .defaults
+        case .smooth:
+            return StabilizerParameters(
+                positionLerpFactor: 0.12,
+                positionDeadbandMeters: 0.0045,
+                yawLerpFactor: 0.10,
+                yawFlipThresholdRadians: .pi * 0.48,
+                temporaryLossDuration: 0.95
+            )
+        case .responsive:
+            return StabilizerParameters(
+                positionLerpFactor: 0.32,
+                positionDeadbandMeters: 0.0015,
+                yawLerpFactor: 0.28,
+                yawFlipThresholdRadians: .pi * 0.70,
+                temporaryLossDuration: 0.55
+            )
+        }
+    }
+}
+
 struct DebugOptions {
     var showRawAnchorGizmo = true
     var showDisplayAnchorGizmo = true
@@ -195,6 +286,7 @@ struct TrackingDebugSnapshot: Sendable {
     let activeScenarioName: String
     let isSyntheticInput: Bool
     let fieldOpacity: Float
+    let replayElapsedSeconds: TimeInterval?
 
     static func empty(
         mode: TrackingInputMode,
@@ -212,7 +304,8 @@ struct TrackingDebugSnapshot: Sendable {
             lifecycleState: .notSeen,
             activeScenarioName: scenarioName,
             isSyntheticInput: mode.isSynthetic,
-            fieldOpacity: fieldOpacity
+            fieldOpacity: fieldOpacity,
+            replayElapsedSeconds: nil
         )
     }
 
@@ -250,6 +343,243 @@ struct TrackingDebugSnapshot: Sendable {
     var formattedFieldOpacity: String {
         String(format: "%.2f", fieldOpacity)
     }
+
+    var formattedReplayElapsed: String {
+        guard let replayElapsedSeconds else {
+            return "n/a"
+        }
+        return String(format: "%.2fs", replayElapsedSeconds)
+    }
+}
+
+struct TrackingMetricsSnapshot: Sendable {
+    let windowDurationSeconds: TimeInterval
+    let sampleCount: Int
+    let maxPositionDeltaMeters: Float
+    let averagePositionDeltaMeters: Float
+    let maxYawDeltaDegrees: Float
+    let temporaryLossCount: Int
+    let recentTransitionCount: Int
+    let yawRejectCount: Int
+
+    static func empty(windowDurationSeconds: TimeInterval = 8.0) -> TrackingMetricsSnapshot {
+        TrackingMetricsSnapshot(
+            windowDurationSeconds: windowDurationSeconds,
+            sampleCount: 0,
+            maxPositionDeltaMeters: 0,
+            averagePositionDeltaMeters: 0,
+            maxYawDeltaDegrees: 0,
+            temporaryLossCount: 0,
+            recentTransitionCount: 0,
+            yawRejectCount: 0
+        )
+    }
+
+    var formattedWindow: String {
+        String(format: "%.0fs", windowDurationSeconds)
+    }
+
+    var formattedMaxPositionDelta: String {
+        String(format: "%.3f m", maxPositionDeltaMeters)
+    }
+
+    var formattedAveragePositionDelta: String {
+        String(format: "%.3f m", averagePositionDeltaMeters)
+    }
+
+    var formattedMaxYawDelta: String {
+        String(format: "%.1f°", maxYawDeltaDegrees)
+    }
+}
+
+enum ValidationRunVerdict: String, Sendable {
+    case pass
+    case attention
+
+    var label: String {
+        switch self {
+        case .pass:
+            return "Pass"
+        case .attention:
+            return "Attention"
+        }
+    }
+}
+
+struct ValidationRunDefinition: Identifiable, Sendable {
+    let scenario: TrackingScenario
+    let preset: StabilizerPreset
+    let durationSeconds: TimeInterval
+
+    var id: String {
+        "\(scenario.rawValue)-\(preset.rawValue)"
+    }
+}
+
+struct ValidationRunResult: Identifiable, Sendable {
+    let id = UUID()
+    let scenario: TrackingScenario
+    let preset: StabilizerPreset
+    let durationSeconds: TimeInterval
+    let averagePositionDeltaMeters: Float
+    let maxPositionDeltaMeters: Float
+    let maxYawDeltaDegrees: Float
+    let stateTransitionCount: Int
+    let yawRejectCount: Int
+    let temporaryLossCount: Int
+    let lostCount: Int
+    let verdict: ValidationRunVerdict
+    let summary: String
+
+    var formattedDuration: String {
+        String(format: "%.1fs", durationSeconds)
+    }
+
+    var formattedAveragePositionDelta: String {
+        String(format: "%.3f m", averagePositionDeltaMeters)
+    }
+
+    var formattedMaxPositionDelta: String {
+        String(format: "%.3f m", maxPositionDeltaMeters)
+    }
+
+    var formattedMaxYawDelta: String {
+        String(format: "%.1f°", maxYawDeltaDegrees)
+    }
+}
+
+struct ValidationSuiteStatus: Sendable {
+    enum Phase: String, Sendable {
+        case idle
+        case running
+        case completed
+
+        var label: String {
+            rawValue.capitalized
+        }
+    }
+
+    let phase: Phase
+    let currentRunIndex: Int
+    let totalRuns: Int
+    let currentScenarioName: String
+    let currentPresetName: String
+    let currentRunElapsed: TimeInterval
+    let totalElapsed: TimeInterval
+    let summary: String
+
+    static let idle = ValidationSuiteStatus(
+        phase: .idle,
+        currentRunIndex: 0,
+        totalRuns: 0,
+        currentScenarioName: "n/a",
+        currentPresetName: "n/a",
+        currentRunElapsed: 0,
+        totalElapsed: 0,
+        summary: "Validation suite has not started."
+    )
+
+    var progressFraction: Double {
+        guard totalRuns > 0 else {
+            return 0
+        }
+        return Double(currentRunIndex) / Double(totalRuns)
+    }
+
+    var formattedCurrentElapsed: String {
+        String(format: "%.1fs", currentRunElapsed)
+    }
+
+    var formattedTotalElapsed: String {
+        String(format: "%.1fs", totalElapsed)
+    }
+}
+
+struct ValidationCaseDefinition: Identifiable, Sendable {
+    let scenario: TrackingScenario
+    let preset: StabilizerPreset
+
+    var id: String {
+        "\(scenario.rawValue)-\(preset.rawValue)"
+    }
+
+    var label: String {
+        "\(scenario.label) / \(preset.label)"
+    }
+}
+
+enum ValidationVerdict: String, Sendable {
+    case pass
+    case warning
+    case fail
+
+    var label: String {
+        rawValue.capitalized
+    }
+}
+
+enum ValidationRunStatus: String, Sendable {
+    case idle
+    case running
+    case completed
+    case cancelled
+
+    var label: String {
+        rawValue.capitalized
+    }
+}
+
+struct ValidationSuiteProgress: Sendable {
+    let status: ValidationRunStatus
+    let completedCases: Int
+    let totalCases: Int
+    let currentCaseLabel: String?
+    let currentCaseElapsedSeconds: TimeInterval
+
+    static let idle = ValidationSuiteProgress(
+        status: .idle,
+        completedCases: 0,
+        totalCases: 0,
+        currentCaseLabel: nil,
+        currentCaseElapsedSeconds: 0
+    )
+
+    var progressLabel: String {
+        "\(completedCases)/\(max(totalCases, 1))"
+    }
+
+    var formattedElapsed: String {
+        String(format: "%.2fs", currentCaseElapsedSeconds)
+    }
+}
+
+struct ValidationCaseResult: Identifiable, Sendable {
+    let id = UUID()
+    let scenario: TrackingScenario
+    let preset: StabilizerPreset
+    let verdict: ValidationVerdict
+    let metrics: TrackingMetricsSnapshot
+    let notes: String
+
+    var title: String {
+        "\(scenario.label) / \(preset.label)"
+    }
+}
+
+struct ValidationSuiteSummary: Sendable {
+    let totalCases: Int
+    let passedCases: Int
+    let warningCases: Int
+    let failedCases: Int
+    let bestStabilityPreset: StabilizerPreset?
+
+    static let empty = ValidationSuiteSummary(
+        totalCases: 0,
+        passedCases: 0,
+        warningCases: 0,
+        failedCases: 0,
+        bestStabilityPreset: nil
+    )
 }
 
 struct TrackingStepResult: Sendable {
@@ -267,6 +597,7 @@ struct TrackingRuntimeSummary {
     let objectTrackingSupported: Bool
     let activeScenarioName: String
     let isSyntheticInput: Bool
+    let validationMode: ValidationMode
 
     static func initial(mode: TrackingInputMode) -> TrackingRuntimeSummary {
         TrackingRuntimeSummary(
@@ -277,7 +608,8 @@ struct TrackingRuntimeSummary {
             latestError: nil,
             objectTrackingSupported: true,
             activeScenarioName: TrackingScenario.steadyOrbit.label,
-            isSyntheticInput: mode.isSynthetic
+            isSyntheticInput: mode.isSynthetic,
+            validationMode: .normalField
         )
     }
 }

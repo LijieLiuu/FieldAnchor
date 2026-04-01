@@ -1,4 +1,4 @@
-import RealityKit
+Auto Validation Runnerimport RealityKit
 import SwiftUI
 
 @MainActor
@@ -82,6 +82,7 @@ final class FieldRenderer {
         state: StabilizedTrackedState,
         debugOptions: DebugOptions,
         runtimeSummary: TrackingRuntimeSummary,
+        validationMode: ValidationMode,
         now: TimeInterval
     ) {
         let deltaTime = max(Float(now - (lastUpdateTime ?? now)), 0.016)
@@ -120,11 +121,15 @@ final class FieldRenderer {
         fieldMountMarkerEntity.isEnabled = debugOptions.showFieldMountMarker && state.trackingState != .notSeen
 
         let targetOpacity: Float
-        switch state.trackingState {
-        case .tracked, .temporarilyLost:
-            targetOpacity = 1.0
-        case .notSeen, .lost:
+        if validationMode == .diagnosticsOnly {
             targetOpacity = 0.0
+        } else {
+            switch state.trackingState {
+            case .tracked, .temporarilyLost:
+                targetOpacity = 1.0
+            case .notSeen, .lost:
+                targetOpacity = 0.0
+            }
         }
 
         currentOpacity += (targetOpacity - currentOpacity) * min(deltaTime * 8.0, 1.0)

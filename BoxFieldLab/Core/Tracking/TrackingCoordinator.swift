@@ -31,7 +31,7 @@ final class TrackingCoordinator {
         guard ObjectTrackingProvider.isSupported else {
             status.objectTrackingSupported = false
             status.providerState = "unsupported"
-            status.latestError = "Object tracking is not supported on the current runtime. Use Manual Demo in the simulator."
+            status.latestError = "Object tracking is not supported on the current runtime. Use Replay Scenario in the simulator."
             return
         }
 

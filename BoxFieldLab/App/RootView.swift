@@ -20,6 +20,22 @@ struct RootView: View {
                         }
                     }
 
+                    Picker(
+                        "Validation Mode",
+                        selection: Binding(
+                            get: { appModel.validationMode },
+                            set: { appModel.setValidationMode($0) }
+                        )
+                    ) {
+                        ForEach(ValidationMode.allCases) { mode in
+                            Text(mode.label).tag(mode)
+                        }
+                    }
+
+                    Text(appModel.validationMode.summary)
+                        .font(.footnote)
+                        .foregroundStyle(.secondary)
+
                     if appModel.inputMode == .replayScenario {
                         Picker(
                             "Scenario",
@@ -36,6 +52,27 @@ struct RootView: View {
                         Text(appModel.selectedScenario.summary)
                             .font(.footnote)
                             .foregroundStyle(.secondary)
+
+                        HStack {
+                            Button(appModel.replayPlaybackState.isPlaying ? "Pause" : "Play") {
+                                appModel.toggleReplayPlayback()
+                            }
+                            .buttonStyle(.borderedProminent)
+
+                            Button("Restart") {
+                                appModel.restartReplay()
+                            }
+                            .buttonStyle(.bordered)
+                        }
+
+                        Picker("Playback Speed", selection: replaySpeedBinding) {
+                            Text("0.5x").tag(0.5)
+                            Text("1.0x").tag(1.0)
+                            Text("2.0x").tag(2.0)
+                        }
+
+                        LabeledContent("Replay Status", value: appModel.replayPlaybackState.statusLabel)
+                        LabeledContent("Replay Elapsed", value: appModel.replayPlaybackState.formattedElapsed)
                     }
 
                     if appModel.inputMode == .manualScripted {
@@ -46,6 +83,16 @@ struct RootView: View {
                                 set: { appModel.manualObjectVisible = $0 }
                             )
                         )
+
+                        Text("Manual Scripted is only a smoke test path. Replay Scenario is the preferred simulator workflow.")
+                            .font(.footnote)
+                            .foregroundStyle(.secondary)
+                    }
+
+                    if appModel.inputMode == .objectTracking {
+                        Text("Object Tracking stays visible here, but real validation still requires Vision Pro hardware.")
+                            .font(.footnote)
+                            .foregroundStyle(.secondary)
                     }
 
                     LabeledContent("Lifecycle", value: appModel.stabilizedState.trackingState.label)
@@ -62,7 +109,49 @@ struct RootView: View {
                     }
                 }
 
+                Section("Auto Validation") {
+                    HStack {
+                        Button("Run Validation Suite") {
+                            appModel.startValidationSuite()
+                        }
+                        .buttonStyle(.borderedProminent)
+
+                        Button("Stop") {
+                            appModel.stopValidationSuite()
+                        }
+                        .buttonStyle(.bordered)
+                    }
+
+                    LabeledContent("Suite Status", value: appModel.validationSuiteStatus.phase.label)
+                    LabeledContent("Current Run", value: "\(appModel.validationSuiteStatus.currentRunIndex)/\(appModel.validationSuiteStatus.totalRuns)")
+                    LabeledContent("Scenario", value: appModel.validationSuiteStatus.currentScenarioName)
+                    LabeledContent("Preset", value: appModel.validationSuiteStatus.currentPresetName)
+                    LabeledContent("Run Elapsed", value: appModel.validationSuiteStatus.formattedCurrentElapsed)
+                    LabeledContent("Suite Elapsed", value: appModel.validationSuiteStatus.formattedTotalElapsed)
+
+                    Text(appModel.validationSuiteStatus.summary)
+                        .font(.footnote)
+                        .foregroundStyle(.secondary)
+
+                    Text(appModel.validationRecommendation)
+                        .font(.footnote)
+                }
+
                 Section("Stabilizer Parameters") {
+                    LabeledContent("Current Preset", value: appModel.appliedPreset?.label ?? "Custom")
+
+                    Menu("Apply Preset") {
+                        ForEach(StabilizerPreset.allCases) { preset in
+                            Button(preset.label) {
+                                appModel.applyPreset(preset)
+                            }
+                        }
+                    }
+
+                    Button("Reset to Defaults") {
+                        appModel.resetParametersToDefaults()
+                    }
+
                     parameterRow(
                         title: "Position Lerp",
                         value: positionLerpBinding,
@@ -102,6 +191,24 @@ struct RootView: View {
                         range: 0.1...2.0,
                         step: 0.05
                     )
+                }
+
+                Section("Stability Summary") {
+                    LabeledContent("Lifecycle", value: appModel.debugSnapshot.lifecycleState.label)
+                    LabeledContent("Position Delta", value: appModel.debugSnapshot.formattedPositionDelta)
+                    LabeledContent("Yaw Delta", value: appModel.debugSnapshot.formattedYawDelta)
+                    LabeledContent("Last Seen Age", value: appModel.debugSnapshot.formattedLastSeenAge)
+                    LabeledContent("Recent Transitions", value: "\(appModel.metricsSnapshot.recentTransitionCount)")
+                    LabeledContent("Yaw Rejects", value: "\(appModel.metricsSnapshot.yawRejectCount)")
+                }
+
+                Section("Rolling Metrics") {
+                    LabeledContent("Window", value: appModel.metricsSnapshot.formattedWindow)
+                    LabeledContent("Samples", value: "\(appModel.metricsSnapshot.sampleCount)")
+                    LabeledContent("Max Position Delta", value: appModel.metricsSnapshot.formattedMaxPositionDelta)
+                    LabeledContent("Avg Position Delta", value: appModel.metricsSnapshot.formattedAveragePositionDelta)
+                    LabeledContent("Max Yaw Delta", value: appModel.metricsSnapshot.formattedMaxYawDelta)
+                    LabeledContent("Temporary-Loss Entries", value: "\(appModel.metricsSnapshot.temporaryLossCount)")
                 }
 
                 Section("Debug Toggles") {
@@ -170,6 +277,12 @@ struct RootView: View {
                     )
                 }
 
+                Section("Marker Guide") {
+                    Text("Red visuals represent raw tracking input.")
+                    Text("Green visuals represent the stabilized display pose.")
+                    Text("Yellow visuals represent the attachment offset and field mount point.")
+                }
+
                 Section("Debug Snapshot") {
                     LabeledContent("Raw Position", value: appModel.debugSnapshot.formattedRawPosition)
                     LabeledContent("Display Position", value: appModel.debugSnapshot.formattedDisplayPosition)
@@ -178,6 +291,7 @@ struct RootView: View {
                     LabeledContent("Position Delta", value: appModel.debugSnapshot.formattedPositionDelta)
                     LabeledContent("Yaw Delta", value: appModel.debugSnapshot.formattedYawDelta)
                     LabeledContent("Last Seen Age", value: appModel.debugSnapshot.formattedLastSeenAge)
+                    LabeledContent("Replay Elapsed", value: appModel.debugSnapshot.formattedReplayElapsed)
                     LabeledContent("Field Opacity", value: appModel.debugSnapshot.formattedFieldOpacity)
                 }
 
@@ -198,8 +312,28 @@ struct RootView: View {
                     }
                 }
 
+                Section("Validation Results") {
+                    if appModel.validationResults.isEmpty {
+                        Text("No validation runs completed yet.")
+                            .foregroundStyle(.secondary)
+                    } else {
+                        ForEach(appModel.validationResults) { result in
+                            VStack(alignment: .leading, spacing: 4) {
+                                Text("\(result.scenario.label) • \(result.preset.label) • \(result.verdict.label)")
+                                    .font(.subheadline.weight(.semibold))
+                                Text("Avg Pos \(result.formattedAveragePositionDelta), Max Pos \(result.formattedMaxPositionDelta), Max Yaw \(result.formattedMaxYawDelta)")
+                                    .font(.footnote)
+                                    .foregroundStyle(.secondary)
+                                Text(result.summary)
+                                    .font(.footnote)
+                                    .foregroundStyle(.secondary)
+                            }
+                        }
+                    }
+                }
+
                 Section("Notes") {
-                    Text("Use Manual Scripted or Replay Scenario in the simulator. Replay Scenario is the preferred no-hardware validation path for the stabilizer and lifecycle logic.")
+                    Text("Use Replay Scenario as the default no-hardware workflow. Compare presets, replay speed, raw/display deltas, and lifecycle behavior before moving to Vision Pro hardware.")
                         .font(.footnote)
                         .foregroundStyle(.secondary)
                 }
@@ -271,6 +405,15 @@ struct RootView: View {
             get: { appModel.stabilizerParameters.temporaryLossDuration },
             set: { newValue in
                 appModel.updateStabilizerParameters { $0.temporaryLossDuration = newValue }
+            }
+        )
+    }
+
+    private var replaySpeedBinding: Binding<Double> {
+        Binding(
+            get: { appModel.replayPlaybackState.speedMultiplier },
+            set: { newValue in
+                appModel.setReplaySpeed(newValue)
             }
         )
     }
