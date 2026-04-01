@@ -258,10 +258,8 @@
 				CURRENT_PROJECT_VERSION = 1;
 				DEVELOPMENT_TEAM = "";
 				ENABLE_PREVIEWS = YES;
-				GENERATE_INFOPLIST_FILE = YES;
-				INFOPLIST_KEY_NSMainCameraUsageDescription = "BoxFieldLab uses camera access for known-object tracking on Vision Pro.";
-				INFOPLIST_KEY_NSWorldSensingUsageDescription = "BoxFieldLab uses world sensing to detect and stabilize known tabletop objects.";
-				INFOPLIST_KEY_UIApplicationSupportsIndirectInputEvents = YES;
+				GENERATE_INFOPLIST_FILE = NO;
+				INFOPLIST_FILE = BoxFieldLab/Info.plist;
 				IPHONEOS_DEPLOYMENT_TARGET = 18.0;
 				LD_RUNPATH_SEARCH_PATHS = (
 					"$(inherited)",
@@ -288,10 +286,8 @@
 				CURRENT_PROJECT_VERSION = 1;
 				DEVELOPMENT_TEAM = "";
 				ENABLE_PREVIEWS = YES;
-				GENERATE_INFOPLIST_FILE = YES;
-				INFOPLIST_KEY_NSMainCameraUsageDescription = "BoxFieldLab uses camera access for known-object tracking on Vision Pro.";
-				INFOPLIST_KEY_NSWorldSensingUsageDescription = "BoxFieldLab uses world sensing to detect and stabilize known tabletop objects.";
-				INFOPLIST_KEY_UIApplicationSupportsIndirectInputEvents = YES;
+				GENERATE_INFOPLIST_FILE = NO;
+				INFOPLIST_FILE = BoxFieldLab/Info.plist;
 				LD_RUNPATH_SEARCH_PATHS = (
 					"$(inherited)",
 					"@executable_path/Frameworks",

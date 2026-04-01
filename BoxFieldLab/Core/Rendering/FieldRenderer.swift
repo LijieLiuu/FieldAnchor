@@ -45,6 +45,8 @@ final class FieldRenderer {
 
         let topOffset = max(state.rawBoundingBoxExtent.y * 0.5 + attachmentSpec.localOffset.y, 0.03)
         fieldMountEntity.position = SIMD3<Float>(attachmentSpec.localOffset.x, topOffset, attachmentSpec.localOffset.z)
+        let fieldScale = runtimeSummary.inputMode == .manualDemo ? attachmentSpec.scale * 2.8 : attachmentSpec.scale
+        fieldVisualEntity.scale = SIMD3<Float>(repeating: fieldScale)
 
         boundingBoxEntity.position = state.rawBoundingBoxCenter
         boundingBoxEntity.scale = max(state.rawBoundingBoxExtent, SIMD3<Float>(repeating: 0.001))
