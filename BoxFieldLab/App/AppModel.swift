@@ -45,7 +45,12 @@ final class AppModel: ObservableObject {
     @Published private(set) var trackingTimeline: [TrackingEvent] = []
     @Published private(set) var validationSuiteStatus = ValidationSuiteStatus.idle
     @Published private(set) var validationResults: [ValidationRunResult] = []
+    @Published private(set) var validationOverview = ValidationOverview.empty
+    @Published private(set) var validationAttentionResults: [ValidationRunResult] = []
+    @Published private(set) var validationPresetSummaries: [ValidationPresetSummary] = []
     @Published private(set) var validationRecommendation = "Run the validation suite to compare presets automatically."
+    @Published private(set) var validationReportText = "Run the validation suite to generate a readable validation report."
+    @Published private(set) var fieldVisualSourceName = "Loading field asset..."
 
     let sceneRootEntity = Entity()
 
@@ -80,6 +85,9 @@ final class AppModel: ObservableObject {
     }
 
     func activate(openImmersiveSpace: OpenImmersiveSpaceAction) async {
+        await fieldRenderer.loadPreferredFieldVisualIfNeeded()
+        fieldVisualSourceName = fieldRenderer.fieldVisualSourceName
+
         if immersiveSpaceOpened == false {
             _ = await openImmersiveSpace(id: Self.immersiveSpaceID)
             immersiveSpaceOpened = true
@@ -161,6 +169,10 @@ final class AppModel: ObservableObject {
     func startValidationSuite() {
         validationDefinitions = Self.makeValidationDefinitions()
         validationResults.removeAll()
+        validationOverview = .empty
+        validationAttentionResults = []
+        validationPresetSummaries = []
+        validationReportText = "Validation suite is running. The report will appear when the full matrix completes."
         validationRecommendation = "Validation suite is running."
         validationCurrentIndex = 0
         validationSuiteStartTime = CACurrentMediaTime()
@@ -178,6 +190,7 @@ final class AppModel: ObservableObject {
         validationCurrentIndex = 0
         validationSuiteStartTime = nil
         validationSuiteStatus = .idle
+        refreshValidationPresentation()
         validationRecommendation = "Validation suite stopped."
     }
 
@@ -375,7 +388,12 @@ final class AppModel: ObservableObject {
         let transitionCount = metricsEvents.filter { $0.title == "State Transition" }.count
         let yawRejectCount = metricsEvents.filter { $0.title == "Yaw Flip Rejected" }.count
         let temporaryLossCount = metricsEvents.filter {
-            $0.title == "State Transition" && $0.detail.contains(TrackingLifecycleState.temporarilyLost.label)
+            guard $0.title == "State Transition",
+                  let (_, newState) = parseStateTransition(from: $0.detail) else {
+                return false
+            }
+
+            return newState == .temporarilyLost
         }.count
 
         return TrackingMetricsSnapshot(
@@ -421,10 +439,12 @@ final class AppModel: ObservableObject {
             switch event.title {
             case "State Transition":
                 accumulator.stateTransitionCount += 1
-                if event.detail.contains(TrackingLifecycleState.temporarilyLost.label) {
+                if let (_, newState) = parseStateTransition(from: event.detail),
+                   newState == .temporarilyLost {
                     accumulator.temporaryLossCount += 1
                 }
-                if event.detail.contains(TrackingLifecycleState.lost.label) {
+                if let (_, newState) = parseStateTransition(from: event.detail),
+                   newState == .lost {
                     accumulator.lostCount += 1
                 }
             case "Yaw Flip Rejected":
@@ -478,6 +498,7 @@ final class AppModel: ObservableObject {
         )
 
         validationResults.append(result)
+        refreshValidationPresentation()
         validationAccumulator = nil
 
         let nextIndex = validationCurrentIndex + 1
@@ -503,6 +524,7 @@ final class AppModel: ObservableObject {
             totalElapsed: (validationSuiteStartTime.map { CACurrentMediaTime() - $0 }) ?? 0,
             summary: "Validation suite completed."
         )
+        refreshValidationPresentation()
         validationRecommendation = makeValidationRecommendation()
     }
 
@@ -564,12 +586,31 @@ final class AppModel: ObservableObject {
     }
 
     private func makeValidationRecommendation() -> String {
-        let grouped = Dictionary(grouping: validationResults, by: \.preset)
-        guard grouped.isEmpty == false else {
+        let ranked = rankedValidationPresets()
+        guard let best = ranked.first else {
             return "No validation results available."
         }
+        return "Best overall preset: \(best.0.label). Compare detailed run results below before changing hardware settings."
+    }
 
-        let ranked = grouped.map { preset, results -> (StabilizerPreset, Float) in
+    private func parseStateTransition(from detail: String) -> (TrackingLifecycleState, TrackingLifecycleState)? {
+        let parts = detail.components(separatedBy: " -> ")
+        guard parts.count == 2,
+              let oldState = lifecycleState(for: parts[0]),
+              let newState = lifecycleState(for: parts[1]) else {
+            return nil
+        }
+
+        return (oldState, newState)
+    }
+
+    private func lifecycleState(for label: String) -> TrackingLifecycleState? {
+        TrackingLifecycleState.allCases.first { $0.label == label }
+    }
+
+    private func rankedValidationPresets() -> [(StabilizerPreset, Float)] {
+        let grouped = Dictionary(grouping: validationResults, by: \.preset)
+        return grouped.map { preset, results -> (StabilizerPreset, Float) in
             let score = results.reduce(Float.zero) { partial, result in
                 partial
                     + result.averagePositionDeltaMeters * 1000
@@ -580,12 +621,120 @@ final class AppModel: ObservableObject {
             return (preset, score / Float(results.count))
         }
         .sorted { $0.1 < $1.1 }
+    }
 
-        guard let best = ranked.first else {
-            return "No validation results available."
+    private func refreshValidationPresentation() {
+        guard validationResults.isEmpty == false else {
+            validationOverview = .empty
+            validationAttentionResults = []
+            validationPresetSummaries = []
+            validationReportText = "Run the validation suite to generate a readable validation report."
+            return
         }
 
-        return "Best overall preset: \(best.0.label). Compare detailed run results below before changing hardware settings."
+        let passCount = validationResults.filter { $0.verdict == .pass }.count
+        let attentionResults = validationResults.filter { $0.verdict == .attention }
+        let attentionCount = attentionResults.count
+        let totalRuns = validationResults.count
+        let rankedPresets = rankedValidationPresets()
+        let bestPresetName = rankedPresets.first?.0.label ?? "n/a"
+        let primaryConcern = makePrimaryConcern(from: attentionResults)
+
+        validationOverview = ValidationOverview(
+            overallAssessment: makeOverallAssessment(passCount: passCount, attentionCount: attentionCount, totalRuns: totalRuns),
+            bestPresetName: bestPresetName,
+            totalRuns: totalRuns,
+            passCount: passCount,
+            attentionCount: attentionCount,
+            primaryConcern: primaryConcern
+        )
+        validationAttentionResults = attentionResults
+        validationPresetSummaries = StabilizerPreset.allCases.compactMap { preset in
+            let results = validationResults.filter { $0.preset == preset }
+            guard results.isEmpty == false else {
+                return nil
+            }
+
+            let averagePosition = results.reduce(Float.zero) { $0 + $1.averagePositionDeltaMeters } / Float(results.count)
+            let averageYaw = results.reduce(Float.zero) { $0 + $1.maxYawDeltaDegrees } / Float(results.count)
+            let passCount = results.filter { $0.verdict == .pass }.count
+            let attentionCount = results.count - passCount
+
+            return ValidationPresetSummary(
+                preset: preset,
+                passCount: passCount,
+                attentionCount: attentionCount,
+                averagePositionDeltaMeters: averagePosition,
+                averageMaxYawDeltaDegrees: averageYaw
+            )
+        }
+        validationReportText = makeValidationReport(
+            totalRuns: totalRuns,
+            passCount: passCount,
+            attentionResults: attentionResults,
+            bestPresetName: bestPresetName
+        )
+    }
+
+    private func makeOverallAssessment(passCount: Int, attentionCount: Int, totalRuns: Int) -> String {
+        if attentionCount == 0 {
+            return "Qualified for the current simulator-only phase."
+        }
+        if totalRuns > 0, passCount * 100 / totalRuns >= 80 {
+            return "Mostly qualified for simulator validation. Fix the remaining attention items before moving to hardware."
+        }
+        return "Not yet qualified. Too many attention items remain in the simulator suite."
+    }
+
+    private func makePrimaryConcern(from attentionResults: [ValidationRunResult]) -> String {
+        guard attentionResults.isEmpty == false else {
+            return "No attention items. The current synthetic suite looks stable."
+        }
+
+        let grouped = Dictionary(grouping: attentionResults, by: \.scenario)
+        guard let topIssue = grouped.max(by: { $0.value.count < $1.value.count }) else {
+            return "Attention items exist, but no dominant scenario was detected."
+        }
+
+        return "\(topIssue.key.label) is the main weak point with \(topIssue.value.count) attention run(s)."
+    }
+
+    private func makeValidationReport(
+        totalRuns: Int,
+        passCount: Int,
+        attentionResults: [ValidationRunResult],
+        bestPresetName: String
+    ) -> String {
+        let attentionCount = attentionResults.count
+        let presetLines = validationPresetSummaries.map { summary in
+            "- \(summary.preset.label): \(summary.scoreSummary), avg pos \(summary.formattedAveragePositionDelta), avg max yaw \(summary.formattedAverageMaxYawDelta)"
+        }
+        let attentionLines = attentionResults.isEmpty
+            ? ["- None"]
+            : attentionResults.map { result in
+                "- \(result.scenario.label) / \(result.preset.label): \(result.summary)"
+            }
+        let detailLines = validationResults.map { result in
+            "- \(result.scenario.label) / \(result.preset.label) / \(result.verdict.label): avg pos \(result.formattedAveragePositionDelta), max pos \(result.formattedMaxPositionDelta), max yaw \(result.formattedMaxYawDelta)"
+        }
+
+        return [
+            "# BoxFieldLab Validation Report",
+            "",
+            "Overall assessment: \(validationOverview.overallAssessment)",
+            "Best overall preset: \(bestPresetName)",
+            "Totals: \(passCount) pass, \(attentionCount) attention, \(totalRuns) run(s)",
+            "Primary concern: \(validationOverview.primaryConcern)",
+            "",
+            "## Preset Comparison",
+            presetLines.joined(separator: "\n"),
+            "",
+            "## Attention Items",
+            attentionLines.joined(separator: "\n"),
+            "",
+            "## Detailed Runs",
+            detailLines.joined(separator: "\n")
+        ].joined(separator: "\n")
     }
 
     private static func makeValidationDefinitions() -> [ValidationRunDefinition] {

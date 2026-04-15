@@ -1,0 +1,14 @@
+#usda 1.0
+(
+    defaultPrim = "FieldRoot"
+    metersPerUnit = 1
+    upAxis = "Y"
+)
+
+def Xform "FieldRoot"
+{
+    def Xform "ParticleTrace"
+    {
+        prepend references = @./Parts/Particle_trace_partb66f9b8ef309c1c78eb43f88d82583970d3ab34faf83edc5fccc627a5770f5ed.usd@
+    }
+}

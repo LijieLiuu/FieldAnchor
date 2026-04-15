@@ -139,7 +139,7 @@ struct RawTrackedObservation: Sendable {
     let isCurrentlyDetected: Bool
 }
 
-enum TrackingLifecycleState: String, Sendable {
+enum TrackingLifecycleState: String, CaseIterable, Sendable {
     case notSeen
     case tracked
     case temporarilyLost
@@ -445,6 +445,46 @@ struct ValidationRunResult: Identifiable, Sendable {
 
     var formattedMaxYawDelta: String {
         String(format: "%.1f°", maxYawDeltaDegrees)
+    }
+}
+
+struct ValidationOverview: Sendable {
+    let overallAssessment: String
+    let bestPresetName: String
+    let totalRuns: Int
+    let passCount: Int
+    let attentionCount: Int
+    let primaryConcern: String
+
+    static let empty = ValidationOverview(
+        overallAssessment: "No validation results yet.",
+        bestPresetName: "n/a",
+        totalRuns: 0,
+        passCount: 0,
+        attentionCount: 0,
+        primaryConcern: "Run the suite to generate a readable report."
+    )
+}
+
+struct ValidationPresetSummary: Identifiable, Sendable {
+    let preset: StabilizerPreset
+    let passCount: Int
+    let attentionCount: Int
+    let averagePositionDeltaMeters: Float
+    let averageMaxYawDeltaDegrees: Float
+
+    var id: StabilizerPreset { preset }
+
+    var scoreSummary: String {
+        "\(passCount) pass, \(attentionCount) attention"
+    }
+
+    var formattedAveragePositionDelta: String {
+        String(format: "%.3f m", averagePositionDeltaMeters)
+    }
+
+    var formattedAverageMaxYawDelta: String {
+        String(format: "%.1f°", averageMaxYawDeltaDegrees)
     }
 }
 

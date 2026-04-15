@@ -99,6 +99,7 @@ struct RootView: View {
                     LabeledContent("Synthetic Input", value: appModel.runtimeSummary.isSyntheticInput ? "Yes" : "No")
                     LabeledContent("Active Scenario", value: appModel.runtimeSummary.activeScenarioName)
                     LabeledContent("Reference Asset", value: appModel.runtimeSummary.referenceAssetName)
+                    LabeledContent("Field Visual", value: appModel.fieldVisualSourceName)
                     LabeledContent("Provider State", value: appModel.runtimeSummary.providerState)
                     LabeledContent("Authorization", value: appModel.runtimeSummary.authorizationState)
 
@@ -135,6 +136,37 @@ struct RootView: View {
 
                     Text(appModel.validationRecommendation)
                         .font(.footnote)
+                }
+
+                Section("Validation Summary") {
+                    LabeledContent("Overall", value: appModel.validationOverview.overallAssessment)
+                    LabeledContent("Best Preset", value: appModel.validationOverview.bestPresetName)
+                    LabeledContent("Pass Runs", value: "\(appModel.validationOverview.passCount)")
+                    LabeledContent("Attention Runs", value: "\(appModel.validationOverview.attentionCount)")
+                    LabeledContent("Total Runs", value: "\(appModel.validationOverview.totalRuns)")
+
+                    Text(appModel.validationOverview.primaryConcern)
+                        .font(.footnote)
+                        .foregroundStyle(.secondary)
+                }
+
+                Section("Preset Comparison") {
+                    if appModel.validationPresetSummaries.isEmpty {
+                        Text("No preset comparison yet.")
+                            .foregroundStyle(.secondary)
+                    } else {
+                        ForEach(appModel.validationPresetSummaries) { summary in
+                            VStack(alignment: .leading, spacing: 4) {
+                                Text(summary.preset.label)
+                                    .font(.subheadline.weight(.semibold))
+                                Text(summary.scoreSummary)
+                                    .font(.footnote)
+                                Text("Avg Pos \(summary.formattedAveragePositionDelta), Avg Max Yaw \(summary.formattedAverageMaxYawDelta)")
+                                    .font(.footnote)
+                                    .foregroundStyle(.secondary)
+                            }
+                        }
+                    }
                 }
 
                 Section("Stabilizer Parameters") {
@@ -312,23 +344,34 @@ struct RootView: View {
                     }
                 }
 
-                Section("Validation Results") {
-                    if appModel.validationResults.isEmpty {
-                        Text("No validation runs completed yet.")
+                Section("Attention Items") {
+                    if appModel.validationAttentionResults.isEmpty {
+                        Text("No attention items. The current suite looks qualified for simulator-only work.")
                             .foregroundStyle(.secondary)
                     } else {
-                        ForEach(appModel.validationResults) { result in
+                        ForEach(appModel.validationAttentionResults) { result in
                             VStack(alignment: .leading, spacing: 4) {
-                                Text("\(result.scenario.label) • \(result.preset.label) • \(result.verdict.label)")
+                                Text("\(result.scenario.label) • \(result.preset.label)")
                                     .font(.subheadline.weight(.semibold))
-                                Text("Avg Pos \(result.formattedAveragePositionDelta), Max Pos \(result.formattedMaxPositionDelta), Max Yaw \(result.formattedMaxYawDelta)")
-                                    .font(.footnote)
-                                    .foregroundStyle(.secondary)
                                 Text(result.summary)
+                                    .font(.footnote)
+                                Text("Avg Pos \(result.formattedAveragePositionDelta), Max Pos \(result.formattedMaxPositionDelta), Max Yaw \(result.formattedMaxYawDelta)")
                                     .font(.footnote)
                                     .foregroundStyle(.secondary)
                             }
                         }
+                    }
+                }
+
+                Section("Validation Report") {
+                    Text("This block is meant to be copied into notes, a weekly report, or a handoff document.")
+                        .font(.footnote)
+                        .foregroundStyle(.secondary)
+
+                    DisclosureGroup("Show Full Report") {
+                        Text(appModel.validationReportText)
+                            .font(.system(.footnote, design: .monospaced))
+                            .textSelection(.enabled)
                     }
                 }
 

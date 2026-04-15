@@ -1,9 +1,10 @@
-Auto Validation Runnerimport RealityKit
+import RealityKit
 import SwiftUI
 
 @MainActor
 final class FieldRenderer {
     let rootEntity = Entity()
+    private(set) var fieldVisualSourceName = "Procedural Magnetic Field (Fallback)"
 
     private let rawAnchorEntity = Entity()
     private let rawGizmoEntity = Entity()
@@ -32,6 +33,7 @@ final class FieldRenderer {
     private(set) var currentOpacity: Float = 0
     private var rawTrailHistory: [SIMD3<Float>] = []
     private var displayTrailHistory: [SIMD3<Float>] = []
+    private var hasAttemptedExternalLoad = false
 
     init() {
         let boxMaterial = SimpleMaterial(color: .cyan.withAlphaComponent(0.15), isMetallic: false)
@@ -76,6 +78,37 @@ final class FieldRenderer {
         fieldMountEntity.name = "FieldMountEntity"
 
         configureHierarchy()
+    }
+
+    func loadPreferredFieldVisualIfNeeded() async {
+        guard hasAttemptedExternalLoad == false else {
+            return
+        }
+
+        hasAttemptedExternalLoad = true
+
+        guard let url = Bundle.main.url(
+            forResource: "ParticleField",
+            withExtension: "usda",
+            subdirectory: "EffectAssets/demo_static_trim"
+        ) else {
+            fieldVisualSourceName = "Procedural Magnetic Field (Fallback)"
+            return
+        }
+
+        do {
+            let loadedEntity = try await Entity(contentsOf: url)
+            let normalizedEntity = Entity()
+            normalizedEntity.name = "ExternalFieldAsset"
+            normalizedEntity.addChild(loadedEntity)
+            normalizedEntity.position = SIMD3<Float>(0, 0.055, 0)
+            normalizedEntity.scale = SIMD3<Float>(repeating: 0.18)
+
+            replaceFieldVisualContent(with: normalizedEntity)
+            fieldVisualSourceName = "demo_static_trim Particle Trace"
+        } catch {
+            fieldVisualSourceName = "Procedural Magnetic Field (Fallback)"
+        }
     }
 
     func update(
@@ -182,6 +215,14 @@ final class FieldRenderer {
         rootEntity.addChild(displayGhostAnchorEntity)
         rootEntity.addChild(rawTrailParent)
         rootEntity.addChild(displayTrailParent)
+    }
+
+    private func replaceFieldVisualContent(with entity: Entity) {
+        for child in fieldVisualEntity.children {
+            child.removeFromParent()
+        }
+
+        fieldVisualEntity.addChild(entity)
     }
 
     private func updateTrails(state: StabilizedTrackedState, debugOptions: DebugOptions) {
