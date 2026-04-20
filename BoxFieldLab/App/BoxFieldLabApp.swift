@@ -14,6 +14,13 @@ struct BoxFieldLabApp: App {
             ImmersiveTrackingView()
                 .environmentObject(appModel)
         }
-        .immersionStyle(selection: .constant(.mixed), in: .mixed)
+        .immersionStyle(
+            selection: Binding(
+                get: { appModel.preferredImmersionStyle },
+                set: { appModel.preferredImmersionStyle = $0 }
+            ),
+            in: .mixed,
+            .full
+        )
     }
 }

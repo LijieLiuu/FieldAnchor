@@ -28,6 +28,7 @@ final class AppModel: ObservableObject {
     @Published var inputMode: TrackingInputMode = .replayScenario
     @Published var selectedScenario: TrackingScenario = .steadyOrbit
     @Published var validationMode: ValidationMode = .normalField
+    @Published var preferredImmersionStyle: ImmersionStyle = .mixed
     @Published var debugOptions = DebugOptions()
     @Published var manualObjectVisible = true
     @Published var stabilizerParameters = StabilizerParameters.defaults
@@ -53,6 +54,7 @@ final class AppModel: ObservableObject {
     @Published private(set) var fieldVisualSourceName = "Loading field asset..."
 
     let sceneRootEntity = Entity()
+    private static let objectTrackingActivationDelay: Duration = .milliseconds(700)
 
     private let referenceCatalog = ReferenceObjectCatalog()
     private lazy var trackingCoordinator = TrackingCoordinator(referenceCatalog: referenceCatalog)
@@ -131,6 +133,7 @@ final class AppModel: ObservableObject {
         }
 
         inputMode = mode
+        preferredImmersionStyle = mode == .objectTracking ? .full : .mixed
         if mode != .replayScenario {
             replayPlaybackState = ReplayPlaybackState.defaults
         }
@@ -178,6 +181,7 @@ final class AppModel: ObservableObject {
         validationSuiteStartTime = CACurrentMediaTime()
 
         inputMode = .replayScenario
+        preferredImmersionStyle = .mixed
         validationMode = .diagnosticsOnly
         replayInputSource.scenario = selectedScenario
 
@@ -192,6 +196,7 @@ final class AppModel: ObservableObject {
         validationSuiteStatus = .idle
         refreshValidationPresentation()
         validationRecommendation = "Validation suite stopped."
+        preferredImmersionStyle = inputMode == .objectTracking ? .full : .mixed
     }
 
     func toggleReplayPlayback() {
@@ -307,6 +312,9 @@ final class AppModel: ObservableObject {
         }
 
         trackingStabilizer.reset(for: .box)
+        if inputMode == .objectTracking {
+            try? await Task.sleep(for: Self.objectTrackingActivationDelay)
+        }
         await activeInputSource.activate()
     }
 

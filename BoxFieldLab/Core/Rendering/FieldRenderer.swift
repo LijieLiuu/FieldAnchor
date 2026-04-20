@@ -3,6 +3,11 @@ import SwiftUI
 
 @MainActor
 final class FieldRenderer {
+    private static let externalFieldCoverageMultiplier: Float = 3.4
+    private static let externalFieldMinimumScale: Float = 0.18
+    private static let externalFieldMountVerticalBias: Float = 0.0
+    private static let externalFieldLocalCenterBias: Float = 0.22
+
     let rootEntity = Entity()
     private(set) var fieldVisualSourceName = "Procedural Magnetic Field (Fallback)"
 
@@ -34,6 +39,7 @@ final class FieldRenderer {
     private var rawTrailHistory: [SIMD3<Float>] = []
     private var displayTrailHistory: [SIMD3<Float>] = []
     private var hasAttemptedExternalLoad = false
+    private var usesExternalFieldVisual = false
 
     init() {
         let boxMaterial = SimpleMaterial(color: .cyan.withAlphaComponent(0.15), isMetallic: false)
@@ -86,29 +92,35 @@ final class FieldRenderer {
         }
 
         hasAttemptedExternalLoad = true
+        let subdirectory = "EffectAssets/demo_static_trim"
+        let candidates = [("ParticleField", "usdz"), ("ParticleField", "usda")]
+        var failures: [String] = []
 
-        guard let url = Bundle.main.url(
-            forResource: "ParticleField",
-            withExtension: "usda",
-            subdirectory: "EffectAssets/demo_static_trim"
-        ) else {
-            fieldVisualSourceName = "Procedural Magnetic Field (Fallback)"
-            return
+        for (resourceName, resourceExtension) in candidates {
+            guard let url = Bundle.main.url(
+                forResource: resourceName,
+                withExtension: resourceExtension,
+                subdirectory: subdirectory
+            ) else {
+                failures.append("\(resourceExtension): missing from bundle")
+                continue
+            }
+
+            do {
+                let loadedEntity = try await Entity(contentsOf: url)
+                let normalizedEntity = makeNormalizedExternalFieldEntity(from: loadedEntity)
+
+                replaceFieldVisualContent(with: normalizedEntity)
+                usesExternalFieldVisual = true
+                fieldVisualSourceName = "demo_static_trim Particle Trace (\(resourceExtension))"
+                return
+            } catch {
+                failures.append("\(resourceExtension): \(String(describing: error))")
+            }
         }
 
-        do {
-            let loadedEntity = try await Entity(contentsOf: url)
-            let normalizedEntity = Entity()
-            normalizedEntity.name = "ExternalFieldAsset"
-            normalizedEntity.addChild(loadedEntity)
-            normalizedEntity.position = SIMD3<Float>(0, 0.055, 0)
-            normalizedEntity.scale = SIMD3<Float>(repeating: 0.18)
-
-            replaceFieldVisualContent(with: normalizedEntity)
-            fieldVisualSourceName = "demo_static_trim Particle Trace"
-        } catch {
-            fieldVisualSourceName = "Procedural Magnetic Field (Fallback)"
-        }
+        usesExternalFieldVisual = false
+        fieldVisualSourceName = "Procedural Magnetic Field (Fallback) | \(failures.joined(separator: " | "))"
     }
 
     func update(
@@ -127,13 +139,30 @@ final class FieldRenderer {
         displayGhostAnchorEntity.setTransformMatrix(state.displayWorldTransform, relativeTo: nil)
 
         let topOffset = max(state.rawBoundingBoxExtent.y * 0.5 + attachmentSpec.localOffset.y, 0.03)
-        fieldMountEntity.position = SIMD3<Float>(attachmentSpec.localOffset.x, topOffset, attachmentSpec.localOffset.z)
+        let centeredMountPosition = state.rawBoundingBoxCenter
+            + SIMD3<Float>(0, state.rawBoundingBoxExtent.y * Self.externalFieldMountVerticalBias, 0)
+        let elevatedMountPosition = state.rawBoundingBoxCenter + SIMD3<Float>(attachmentSpec.localOffset.x, topOffset, attachmentSpec.localOffset.z)
+        fieldMountEntity.position = usesExternalFieldVisual ? centeredMountPosition : elevatedMountPosition
         fieldMountMarkerEntity.position = .zero
 
-        attachmentOffsetEntity.position = SIMD3<Float>(0, topOffset * 0.5, 0)
-        attachmentOffsetEntity.scale = SIMD3<Float>(1, max(topOffset, 0.001), 1)
+        if usesExternalFieldVisual {
+            attachmentOffsetEntity.position = .zero
+            attachmentOffsetEntity.scale = SIMD3<Float>(1, 0.001, 1)
+        } else {
+            attachmentOffsetEntity.position = SIMD3<Float>(0, topOffset * 0.5, 0)
+            attachmentOffsetEntity.scale = SIMD3<Float>(1, max(topOffset, 0.001), 1)
+        }
 
-        let fieldScale = runtimeSummary.isSyntheticInput ? attachmentSpec.scale * 2.8 : attachmentSpec.scale
+        let objectMaxDimension = max(state.rawBoundingBoxExtent.x, max(state.rawBoundingBoxExtent.y, state.rawBoundingBoxExtent.z))
+        let fieldScale: Float
+        if usesExternalFieldVisual {
+            fieldScale = max(
+                objectMaxDimension * Self.externalFieldCoverageMultiplier,
+                Self.externalFieldMinimumScale
+            )
+        } else {
+            fieldScale = runtimeSummary.isSyntheticInput ? attachmentSpec.scale * 2.8 : attachmentSpec.scale
+        }
         fieldVisualEntity.scale = SIMD3<Float>(repeating: fieldScale)
 
         boundingBoxEntity.position = state.rawBoundingBoxCenter
@@ -168,7 +197,11 @@ final class FieldRenderer {
         currentOpacity += (targetOpacity - currentOpacity) * min(deltaTime * 8.0, 1.0)
         fieldVisualEntity.components.set(OpacityComponent(opacity: currentOpacity))
         fieldVisualEntity.isEnabled = currentOpacity > 0.01
-        fieldVisualEntity.orientation *= simd_quatf(angle: deltaTime * 0.35, axis: SIMD3<Float>(0, 1, 0))
+        if usesExternalFieldVisual {
+            fieldVisualEntity.orientation = simd_quatf()
+        } else {
+            fieldVisualEntity.orientation *= simd_quatf(angle: deltaTime * 0.35, axis: SIMD3<Float>(0, 1, 0))
+        }
 
         updateTrails(state: state, debugOptions: debugOptions)
 
@@ -222,7 +255,26 @@ final class FieldRenderer {
             child.removeFromParent()
         }
 
+        fieldVisualEntity.orientation = simd_quatf()
         fieldVisualEntity.addChild(entity)
+    }
+
+    private func makeNormalizedExternalFieldEntity(from loadedEntity: Entity) -> Entity {
+        let bounds = loadedEntity.visualBounds(recursive: true, relativeTo: nil)
+        let extents = max(bounds.extents, SIMD3<Float>(repeating: 0.001))
+        let maxDimension = max(extents.x, max(extents.y, extents.z))
+
+        let centeredEntity = Entity()
+        centeredEntity.name = "CenteredExternalFieldAsset"
+        centeredEntity.addChild(loadedEntity)
+        loadedEntity.position = -bounds.center + SIMD3<Float>(0, extents.y * Self.externalFieldLocalCenterBias, 0)
+
+        let normalizedEntity = Entity()
+        normalizedEntity.name = "ExternalFieldAsset"
+        normalizedEntity.addChild(centeredEntity)
+        normalizedEntity.scale = SIMD3<Float>(repeating: 1 / maxDimension)
+
+        return normalizedEntity
     }
 
     private func updateTrails(state: StabilizedTrackedState, debugOptions: DebugOptions) {

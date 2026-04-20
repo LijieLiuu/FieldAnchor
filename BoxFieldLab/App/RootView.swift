@@ -90,7 +90,7 @@ struct RootView: View {
                     }
 
                     if appModel.inputMode == .objectTracking {
-                        Text("Object Tracking stays visible here, but real validation still requires Vision Pro hardware.")
+                        Text("Object Tracking requires Vision Pro hardware and automatically switches the immersive scene to Full Space so ARKit tracking can run correctly.")
                             .font(.footnote)
                             .foregroundStyle(.secondary)
                     }
