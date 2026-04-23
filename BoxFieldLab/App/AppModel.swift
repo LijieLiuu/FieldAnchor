@@ -28,7 +28,6 @@ final class AppModel: ObservableObject {
     @Published var inputMode: TrackingInputMode = .replayScenario
     @Published var selectedScenario: TrackingScenario = .steadyOrbit
     @Published var validationMode: ValidationMode = .normalField
-    @Published var preferredImmersionStyle: ImmersionStyle = .mixed
     @Published var debugOptions = DebugOptions()
     @Published var manualObjectVisible = true
     @Published var stabilizerParameters = StabilizerParameters.defaults
@@ -133,7 +132,6 @@ final class AppModel: ObservableObject {
         }
 
         inputMode = mode
-        preferredImmersionStyle = mode == .objectTracking ? .full : .mixed
         if mode != .replayScenario {
             replayPlaybackState = ReplayPlaybackState.defaults
         }
@@ -181,7 +179,6 @@ final class AppModel: ObservableObject {
         validationSuiteStartTime = CACurrentMediaTime()
 
         inputMode = .replayScenario
-        preferredImmersionStyle = .mixed
         validationMode = .diagnosticsOnly
         replayInputSource.scenario = selectedScenario
 
@@ -196,7 +193,6 @@ final class AppModel: ObservableObject {
         validationSuiteStatus = .idle
         refreshValidationPresentation()
         validationRecommendation = "Validation suite stopped."
-        preferredImmersionStyle = inputMode == .objectTracking ? .full : .mixed
     }
 
     func toggleReplayPlayback() {
@@ -329,7 +325,7 @@ final class AppModel: ObservableObject {
     private func refreshRuntimeSummary() {
         runtimeSummary = TrackingRuntimeSummary(
             inputMode: inputMode,
-            referenceAssetName: referenceCatalog.descriptor(for: .box).displayName,
+            referenceAssetNames: referenceCatalog.descriptorAvailabilitySummary(),
             providerState: trackingCoordinator.status.providerState,
             authorizationState: trackingCoordinator.status.authorizationState,
             latestError: trackingCoordinator.status.latestError,

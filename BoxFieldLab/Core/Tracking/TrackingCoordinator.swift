@@ -6,6 +6,7 @@ struct TrackingCoordinatorStatus {
     var authorizationState = "not requested"
     var latestError: String?
     var objectTrackingSupported = ObjectTrackingProvider.isSupported
+    var loadedReferenceAssets = "none"
 }
 
 @MainActor
@@ -39,7 +40,13 @@ final class TrackingCoordinator {
         status.providerState = "loading reference object"
 
         do {
-            let referenceObjects = try await referenceCatalog.loadReferenceObjects(for: [.box])
+            let requestedKinds = TrackedObjectKind.allCases
+            let referenceObjects = try await referenceCatalog.loadReferenceObjects(for: requestedKinds)
+            status.loadedReferenceAssets = referenceObjects
+                .keys
+                .sorted { $0.rawValue < $1.rawValue }
+                .map { referenceCatalog.descriptor(for: $0).displayName }
+                .joined(separator: ", ")
             referenceKindByID = Dictionary(uniqueKeysWithValues: referenceObjects.map { ($0.value.id, $0.key) })
 
             let provider = ObjectTrackingProvider(referenceObjects: Array(referenceObjects.values))
@@ -75,6 +82,7 @@ final class TrackingCoordinator {
         objectTrackingProvider = nil
         latestObservation = nil
         referenceKindByID.removeAll()
+        status.loadedReferenceAssets = "none"
         session.stop()
     }
 

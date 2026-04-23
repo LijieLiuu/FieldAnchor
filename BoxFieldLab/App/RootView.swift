@@ -90,7 +90,10 @@ struct RootView: View {
                     }
 
                     if appModel.inputMode == .objectTracking {
-                        Text("Object Tracking requires Vision Pro hardware and automatically switches the immersive scene to Full Space so ARKit tracking can run correctly.")
+                        Text("Object Tracking requires Vision Pro hardware. Stay in mixed immersive mode so the real box remains visible while ARKit tracking runs.")
+                            .font(.footnote)
+                            .foregroundStyle(.secondary)
+                        Text("To detect extra objects, add their matching .referenceObject files under Resources/ReferenceObjects. This build is set up for box, phone, and keyboard.")
                             .font(.footnote)
                             .foregroundStyle(.secondary)
                     }
@@ -98,7 +101,7 @@ struct RootView: View {
                     LabeledContent("Lifecycle", value: appModel.stabilizedState.trackingState.label)
                     LabeledContent("Synthetic Input", value: appModel.runtimeSummary.isSyntheticInput ? "Yes" : "No")
                     LabeledContent("Active Scenario", value: appModel.runtimeSummary.activeScenarioName)
-                    LabeledContent("Reference Asset", value: appModel.runtimeSummary.referenceAssetName)
+                    LabeledContent("Reference Assets", value: appModel.runtimeSummary.referenceAssetNames.isEmpty ? "none" : appModel.runtimeSummary.referenceAssetNames)
                     LabeledContent("Field Visual", value: appModel.fieldVisualSourceName)
                     LabeledContent("Provider State", value: appModel.runtimeSummary.providerState)
                     LabeledContent("Authorization", value: appModel.runtimeSummary.authorizationState)

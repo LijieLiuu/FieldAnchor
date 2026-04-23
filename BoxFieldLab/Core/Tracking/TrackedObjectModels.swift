@@ -3,8 +3,21 @@ import simd
 
 enum TrackedObjectKind: String, CaseIterable, Identifiable, Sendable {
     case box
+    case phone
+    case keyboard
 
     var id: String { rawValue }
+
+    var label: String {
+        switch self {
+        case .box:
+            return "Box"
+        case .phone:
+            return "Phone"
+        case .keyboard:
+            return "Keyboard"
+        }
+    }
 }
 
 enum TrackingInputMode: String, CaseIterable, Identifiable {
@@ -192,6 +205,18 @@ struct FieldAttachmentSpec: Sendable {
         targetKind: .box,
         localOffset: SIMD3<Float>(0, 0.08, 0),
         scale: 1.0
+    )
+
+    static let phaseOnePhone = FieldAttachmentSpec(
+        targetKind: .phone,
+        localOffset: SIMD3<Float>(0, 0.03, 0),
+        scale: 0.65
+    )
+
+    static let phaseOneKeyboard = FieldAttachmentSpec(
+        targetKind: .keyboard,
+        localOffset: SIMD3<Float>(0, 0.015, 0),
+        scale: 0.9
     )
 }
 
@@ -630,7 +655,7 @@ struct TrackingStepResult: Sendable {
 
 struct TrackingRuntimeSummary {
     let inputMode: TrackingInputMode
-    let referenceAssetName: String
+    let referenceAssetNames: String
     let providerState: String
     let authorizationState: String
     let latestError: String?
@@ -642,7 +667,7 @@ struct TrackingRuntimeSummary {
     static func initial(mode: TrackingInputMode) -> TrackingRuntimeSummary {
         TrackingRuntimeSummary(
             inputMode: mode,
-            referenceAssetName: "Box.referenceObject",
+            referenceAssetNames: "Box.referenceObject",
             providerState: "idle",
             authorizationState: "not requested",
             latestError: nil,

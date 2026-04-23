@@ -33,7 +33,6 @@ final class FieldRenderer {
     private let rawTrailEntities: [ModelEntity]
     private let displayTrailEntities: [ModelEntity]
 
-    private let attachmentSpec = FieldAttachmentSpec.phaseOneBox
     private var lastUpdateTime: TimeInterval?
     private(set) var currentOpacity: Float = 0
     private var rawTrailHistory: [SIMD3<Float>] = []
@@ -130,6 +129,7 @@ final class FieldRenderer {
         validationMode: ValidationMode,
         now: TimeInterval
     ) {
+        let attachmentSpec = attachmentSpec(for: state.kind)
         let deltaTime = max(Float(now - (lastUpdateTime ?? now)), 0.016)
         lastUpdateTime = now
 
@@ -210,6 +210,17 @@ final class FieldRenderer {
             boundingBoxEntity.isEnabled = false
             rawGhostAnchorEntity.isEnabled = false
             displayGhostAnchorEntity.isEnabled = false
+        }
+    }
+
+    private func attachmentSpec(for kind: TrackedObjectKind) -> FieldAttachmentSpec {
+        switch kind {
+        case .box:
+            return .phaseOneBox
+        case .phone:
+            return .phaseOnePhone
+        case .keyboard:
+            return .phaseOneKeyboard
         }
     }
 

@@ -34,6 +34,10 @@ final class TrackingStabilizer {
         _ rawObservation: RawTrackedObservation,
         now: TimeInterval
     ) -> TrackingStepResult {
+        if state.kind != rawObservation.kind {
+            reset(for: rawObservation.kind)
+        }
+
         let previousState = state.trackingState
         var events: [TrackingEvent] = []
 
