@@ -7,6 +7,10 @@ final class TrackingStabilizer {
 
     private var state: StabilizedTrackedState
     private var hasEverTracked = false
+    private var predictedPosition = SIMD3<Float>.zero
+    private var estimatedVelocity = SIMD3<Float>.zero
+    private var lastObservationTimestamp: TimeInterval?
+    private var lastPredictionTimestamp: TimeInterval?
     private var lastDeadbandEventTimestamp: TimeInterval?
     private var lastYawRejectEventTimestamp: TimeInterval?
 
@@ -17,6 +21,10 @@ final class TrackingStabilizer {
 
     func reset(for kind: TrackedObjectKind) {
         hasEverTracked = false
+        predictedPosition = .zero
+        estimatedVelocity = .zero
+        lastObservationTimestamp = nil
+        lastPredictionTimestamp = nil
         lastDeadbandEventTimestamp = nil
         lastYawRejectEventTimestamp = nil
         state = .notSeen(kind: kind)
@@ -45,7 +53,14 @@ final class TrackingStabilizer {
         let rawYaw = normalizeAngle(rawObservation.rawWorldTransform.yawRadians)
 
         if hasEverTracked == false || state.trackingState == .notSeen {
-            let displayTransform = simd_float4x4.worldUp(position: rawPosition, yaw: rawYaw)
+            predictedPosition = rawPosition
+            estimatedVelocity = .zero
+            lastObservationTimestamp = now
+            lastPredictionTimestamp = now
+
+            let displayTransform = rawObservation.kind == .phone
+                ? rawObservation.rawWorldTransform.replacingTranslation(rawPosition)
+                : simd_float4x4.worldUp(position: rawPosition, yaw: rawYaw)
             hasEverTracked = true
             state = StabilizedTrackedState(
                 kind: rawObservation.kind,
@@ -68,8 +83,12 @@ final class TrackingStabilizer {
             return makeStepResult(now: now, events: events)
         }
 
+        let filteredPosition = filteredPredictedPosition(
+            measurement: rawPosition,
+            now: now
+        )
         let previousDisplayPosition = state.displayWorldTransform.translation
-        let positionDelta = rawPosition - previousDisplayPosition
+        let positionDelta = filteredPosition - previousDisplayPosition
         let nextDisplayPosition: SIMD3<Float>
 
         if simd_length(positionDelta) > parameters.positionDeadbandMeters {
@@ -114,11 +133,15 @@ final class TrackingStabilizer {
             }
         }
 
+        let displayWorldTransform = rawObservation.kind == .phone
+            ? rawObservation.rawWorldTransform.replacingTranslation(nextDisplayPosition)
+            : simd_float4x4.worldUp(position: nextDisplayPosition, yaw: nextDisplayYaw)
+
         state = StabilizedTrackedState(
             kind: rawObservation.kind,
             timestamp: now,
             rawWorldTransform: rawObservation.rawWorldTransform,
-            displayWorldTransform: simd_float4x4.worldUp(position: nextDisplayPosition, yaw: nextDisplayYaw),
+            displayWorldTransform: displayWorldTransform,
             rawBoundingBoxCenter: rawObservation.rawBoundingBoxCenter,
             rawBoundingBoxExtent: rawObservation.rawBoundingBoxExtent,
             trackingState: .tracked,
@@ -154,12 +177,15 @@ final class TrackingStabilizer {
             let nextLifecycle: TrackingLifecycleState = elapsedSinceLastSeen <= parameters.temporaryLossDuration
                 ? .temporarilyLost
                 : .lost
+            let predictedDisplayTransform = nextLifecycle == .temporarilyLost
+                ? transformPredictedThroughLoss(now: now)
+                : state.displayWorldTransform
 
             state = StabilizedTrackedState(
                 kind: state.kind,
                 timestamp: now,
                 rawWorldTransform: state.rawWorldTransform,
-                displayWorldTransform: state.displayWorldTransform,
+                displayWorldTransform: predictedDisplayTransform,
                 rawBoundingBoxCenter: state.rawBoundingBoxCenter,
                 rawBoundingBoxExtent: state.rawBoundingBoxExtent,
                 trackingState: nextLifecycle,
@@ -183,6 +209,52 @@ final class TrackingStabilizer {
         }
 
         return makeStepResult(now: now, events: events)
+    }
+
+    private func filteredPredictedPosition(
+        measurement: SIMD3<Float>,
+        now: TimeInterval
+    ) -> SIMD3<Float> {
+        let deltaTime = clampedDeltaTime(since: lastObservationTimestamp, now: now)
+        let predicted = predictedPosition + estimatedVelocity * Float(deltaTime)
+        let residual = measurement - predicted
+
+        predictedPosition = predicted + residual * parameters.predictionAlpha
+        estimatedVelocity += residual * (parameters.predictionBeta / max(Float(deltaTime), 0.001))
+        lastObservationTimestamp = now
+        lastPredictionTimestamp = now
+
+        let leadOffset = clampedVector(
+            estimatedVelocity * Float(parameters.predictionLeadTime),
+            maxLength: parameters.maxPredictionStepMeters
+        )
+        return predictedPosition + leadOffset
+    }
+
+    private func transformPredictedThroughLoss(now: TimeInterval) -> simd_float4x4 {
+        let deltaTime = clampedDeltaTime(since: lastPredictionTimestamp, now: now)
+        lastPredictionTimestamp = now
+
+        let step = clampedVector(
+            estimatedVelocity * Float(deltaTime),
+            maxLength: parameters.maxPredictionStepMeters
+        )
+        predictedPosition += step
+
+        return state.displayWorldTransform.replacingTranslation(predictedPosition)
+    }
+
+    private func clampedDeltaTime(since timestamp: TimeInterval?, now: TimeInterval) -> TimeInterval {
+        min(max(now - (timestamp ?? now), 1.0 / 120.0), 0.25)
+    }
+
+    private func clampedVector(_ vector: SIMD3<Float>, maxLength: Float) -> SIMD3<Float> {
+        let length = simd_length(vector)
+        guard length > maxLength, length > 0 else {
+            return vector
+        }
+
+        return vector / length * maxLength
     }
 
     private func makeStepResult(now: TimeInterval, events: [TrackingEvent]) -> TrackingStepResult {

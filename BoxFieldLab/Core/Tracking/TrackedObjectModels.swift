@@ -223,6 +223,10 @@ struct FieldAttachmentSpec: Sendable {
 struct StabilizerParameters: Sendable {
     var positionLerpFactor: Float = 0.18
     var positionDeadbandMeters: Float = 0.003
+    var predictionAlpha: Float = 0.36
+    var predictionBeta: Float = 0.12
+    var predictionLeadTime: TimeInterval = 0.08
+    var maxPredictionStepMeters: Float = 0.045
     var yawLerpFactor: Float = 0.16
     var yawFlipThresholdRadians: Float = .pi * 0.55
     var temporaryLossDuration: TimeInterval = 0.75
@@ -256,6 +260,10 @@ enum StabilizerPreset: String, CaseIterable, Identifiable {
             return StabilizerParameters(
                 positionLerpFactor: 0.12,
                 positionDeadbandMeters: 0.0045,
+                predictionAlpha: 0.24,
+                predictionBeta: 0.07,
+                predictionLeadTime: 0.06,
+                maxPredictionStepMeters: 0.030,
                 yawLerpFactor: 0.10,
                 yawFlipThresholdRadians: .pi * 0.48,
                 temporaryLossDuration: 0.95
@@ -264,6 +272,10 @@ enum StabilizerPreset: String, CaseIterable, Identifiable {
             return StabilizerParameters(
                 positionLerpFactor: 0.32,
                 positionDeadbandMeters: 0.0015,
+                predictionAlpha: 0.50,
+                predictionBeta: 0.18,
+                predictionLeadTime: 0.10,
+                maxPredictionStepMeters: 0.060,
                 yawLerpFactor: 0.28,
                 yawFlipThresholdRadians: .pi * 0.70,
                 temporaryLossDuration: 0.55

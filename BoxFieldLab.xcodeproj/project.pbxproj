@@ -39,6 +39,9 @@
 		A2000001000000000000000D /* ReferenceObjects */ = {isa = PBXFileReference; lastKnownFileType = folder; path = ReferenceObjects; sourceTree = "<group>"; };
 		A2000001000000000000000E /* BoxFieldLab.app */ = {isa = PBXFileReference; explicitFileType = wrapper.application; includeInIndex = 0; path = BoxFieldLab.app; sourceTree = BUILT_PRODUCTS_DIR; };
 		A2000001000000000000000F /* EffectAssets */ = {isa = PBXFileReference; lastKnownFileType = folder; path = EffectAssets; sourceTree = "<group>"; };
+		A20000010000000000000010 /* README.md */ = {isa = PBXFileReference; lastKnownFileType = net.daringfireball.markdown; path = README.md; sourceTree = "<group>"; };
+		A20000010000000000000011 /* THIRD_PARTY_NOTICES.md */ = {isa = PBXFileReference; lastKnownFileType = net.daringfireball.markdown; path = THIRD_PARTY_NOTICES.md; sourceTree = "<group>"; };
+		A20000010000000000000012 /* HARDWARE_VALIDATION_CHECKLIST.md */ = {isa = PBXFileReference; lastKnownFileType = net.daringfireball.markdown; path = HARDWARE_VALIDATION_CHECKLIST.md; sourceTree = "<group>"; };
 /* End PBXFileReference section */
 
 /* Begin PBXFrameworksBuildPhase section */
@@ -67,6 +70,7 @@
 				A40000010000000000000004 /* Core */,
 				A2000001000000000000000C /* Assets.xcassets */,
 				A40000010000000000000008 /* Resources */,
+				A4000001000000000000000A /* Docs */,
 			);
 			path = BoxFieldLab;
 			sourceTree = "<group>";
@@ -135,6 +139,16 @@
 				A2000001000000000000000E /* BoxFieldLab.app */,
 			);
 			name = Products;
+			sourceTree = "<group>";
+		};
+		A4000001000000000000000A /* Docs */ = {
+			isa = PBXGroup;
+			children = (
+				A20000010000000000000010 /* README.md */,
+				A20000010000000000000011 /* THIRD_PARTY_NOTICES.md */,
+				A20000010000000000000012 /* HARDWARE_VALIDATION_CHECKLIST.md */,
+			);
+			path = Docs;
 			sourceTree = "<group>";
 		};
 /* End PBXGroup section */

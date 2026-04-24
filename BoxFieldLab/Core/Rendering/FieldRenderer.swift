@@ -138,9 +138,10 @@ final class FieldRenderer {
         rawGhostAnchorEntity.setTransformMatrix(state.rawWorldTransform, relativeTo: nil)
         displayGhostAnchorEntity.setTransformMatrix(state.displayWorldTransform, relativeTo: nil)
 
-        let topOffset = max(state.rawBoundingBoxExtent.y * 0.5 + attachmentSpec.localOffset.y, 0.03)
+        let renderExtent = renderExtent(for: state)
+        let topOffset = max(renderExtent.y * 0.5 + attachmentSpec.localOffset.y, 0.03)
         let centeredMountPosition = state.rawBoundingBoxCenter
-            + SIMD3<Float>(0, state.rawBoundingBoxExtent.y * Self.externalFieldMountVerticalBias, 0)
+            + SIMD3<Float>(0, renderExtent.y * Self.externalFieldMountVerticalBias, 0)
         let elevatedMountPosition = state.rawBoundingBoxCenter + SIMD3<Float>(attachmentSpec.localOffset.x, topOffset, attachmentSpec.localOffset.z)
         fieldMountEntity.position = usesExternalFieldVisual ? centeredMountPosition : elevatedMountPosition
         fieldMountMarkerEntity.position = .zero
@@ -153,7 +154,7 @@ final class FieldRenderer {
             attachmentOffsetEntity.scale = SIMD3<Float>(1, max(topOffset, 0.001), 1)
         }
 
-        let objectMaxDimension = max(state.rawBoundingBoxExtent.x, max(state.rawBoundingBoxExtent.y, state.rawBoundingBoxExtent.z))
+        let objectMaxDimension = max(renderExtent.x, max(renderExtent.y, renderExtent.z))
         let fieldScale: Float
         if usesExternalFieldVisual {
             fieldScale = max(
@@ -166,7 +167,7 @@ final class FieldRenderer {
         fieldVisualEntity.scale = SIMD3<Float>(repeating: fieldScale)
 
         boundingBoxEntity.position = state.rawBoundingBoxCenter
-        boundingBoxEntity.scale = max(state.rawBoundingBoxExtent, SIMD3<Float>(repeating: 0.001))
+        boundingBoxEntity.scale = max(renderExtent, SIMD3<Float>(repeating: 0.001))
         rawGhostBoxEntity.position = state.rawBoundingBoxCenter
         rawGhostBoxEntity.scale = boundingBoxEntity.scale
         displayGhostBoxEntity.position = state.rawBoundingBoxCenter
@@ -221,6 +222,19 @@ final class FieldRenderer {
             return .phaseOnePhone
         case .keyboard:
             return .phaseOneKeyboard
+        }
+    }
+
+    private func renderExtent(for state: StabilizedTrackedState) -> SIMD3<Float> {
+        switch state.kind {
+        case .phone:
+            return SIMD3<Float>(
+                state.rawBoundingBoxExtent.x,
+                state.rawBoundingBoxExtent.z,
+                state.rawBoundingBoxExtent.y
+            )
+        case .box, .keyboard:
+            return state.rawBoundingBoxExtent
         }
     }
 

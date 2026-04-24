@@ -204,6 +204,38 @@ struct RootView: View {
                     )
 
                     parameterRow(
+                        title: "Kalman Alpha",
+                        value: predictionAlphaBinding,
+                        formattedValue: String(format: "%.2f", appModel.stabilizerParameters.predictionAlpha),
+                        range: 0.05...0.8,
+                        step: 0.01
+                    )
+
+                    parameterRow(
+                        title: "Kalman Beta",
+                        value: predictionBetaBinding,
+                        formattedValue: String(format: "%.2f", appModel.stabilizerParameters.predictionBeta),
+                        range: 0.01...0.4,
+                        step: 0.01
+                    )
+
+                    parameterRow(
+                        title: "Prediction Lead",
+                        value: predictionLeadBinding,
+                        formattedValue: String(format: "%.2fs", appModel.stabilizerParameters.predictionLeadTime),
+                        range: 0.0...0.2,
+                        step: 0.01
+                    )
+
+                    parameterRow(
+                        title: "Max Prediction Step",
+                        value: maxPredictionStepBinding,
+                        formattedValue: String(format: "%.3fm", appModel.stabilizerParameters.maxPredictionStepMeters),
+                        range: 0.005...0.12,
+                        step: 0.005
+                    )
+
+                    parameterRow(
                         title: "Yaw Lerp",
                         value: yawLerpBinding,
                         formattedValue: String(format: "%.3f", appModel.stabilizerParameters.yawLerpFactor),
@@ -424,6 +456,42 @@ struct RootView: View {
             get: { Double(appModel.stabilizerParameters.positionDeadbandMeters) },
             set: { newValue in
                 appModel.updateStabilizerParameters { $0.positionDeadbandMeters = Float(newValue) }
+            }
+        )
+    }
+
+    private var predictionAlphaBinding: Binding<Double> {
+        Binding(
+            get: { Double(appModel.stabilizerParameters.predictionAlpha) },
+            set: { newValue in
+                appModel.updateStabilizerParameters { $0.predictionAlpha = Float(newValue) }
+            }
+        )
+    }
+
+    private var predictionBetaBinding: Binding<Double> {
+        Binding(
+            get: { Double(appModel.stabilizerParameters.predictionBeta) },
+            set: { newValue in
+                appModel.updateStabilizerParameters { $0.predictionBeta = Float(newValue) }
+            }
+        )
+    }
+
+    private var predictionLeadBinding: Binding<Double> {
+        Binding(
+            get: { appModel.stabilizerParameters.predictionLeadTime },
+            set: { newValue in
+                appModel.updateStabilizerParameters { $0.predictionLeadTime = newValue }
+            }
+        )
+    }
+
+    private var maxPredictionStepBinding: Binding<Double> {
+        Binding(
+            get: { Double(appModel.stabilizerParameters.maxPredictionStepMeters) },
+            set: { newValue in
+                appModel.updateStabilizerParameters { $0.maxPredictionStepMeters = Float(newValue) }
             }
         )
     }

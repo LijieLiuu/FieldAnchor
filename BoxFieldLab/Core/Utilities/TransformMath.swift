@@ -18,6 +18,12 @@ extension simd_float4x4 {
         return SIMD3<Float>(homogenous.x, homogenous.y, homogenous.z)
     }
 
+    func replacingTranslation(_ translation: SIMD3<Float>) -> simd_float4x4 {
+        var transform = self
+        transform.columns.3 = SIMD4<Float>(translation.x, translation.y, translation.z, 1)
+        return transform
+    }
+
     var yawRadians: Float {
         let forward = SIMD3<Float>(columns.2.x, 0, columns.2.z)
         if simd_length_squared(forward) < 0.000_001 {
